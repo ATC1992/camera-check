@@ -118,7 +118,7 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
   <header>
     <p class="eyebrow">Helping build a trading-card scanner</p>
     <h1>Camera Check</h1>
-    <p class="lede">Checks what this phone's cameras and browser can do, so the scanner can work well on as many phones as possible. Nothing leaves your phone: when it's done, you copy the result and send it to whoever shared this page with you.</p>
+    <p class="lede">Checks what this phone's cameras and browser can do, so the scanner can work well on as many phones as possible. Nothing leaves your phone on its own: when it's done, you send the result as a small file to whoever shared this page with you.</p>
   </header>
 
   <section class="card" id="step1">
@@ -155,12 +155,12 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
 
   <section class="card" id="step3" hidden>
     <h2><span class="num" id="sendNum">3</span>Send the result</h2>
-    <p>Copy it, then paste it into a text or email to the person who shared this page.</p>
+    <p id="sendHow">Tap <strong>Send as file</strong> and pick Discord (or Messages, email…), then the chat with the person who shared this page. On a computer, <strong>Save file</strong> and drag it into the chat.</p>
     <div class="actions">
-      <button class="primary" id="copy" type="button">Copy result</button>
-      <button id="share" type="button" hidden>Share…</button>
+      <button class="primary" id="sendFile" type="button">Send as file</button>
+      <button id="saveFile" type="button">Save file</button>
     </div>
-    <p class="note" id="copyNote" aria-live="polite"></p>
+    <p class="note" id="sendNote" aria-live="polite"></p>
     <details id="outDetails">
       <summary>See exactly what's in the result (<span id="outSize"></span>)</summary>
       <pre class="out" id="out"></pre>
@@ -168,12 +168,12 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
     <p class="hint">Included: the phone model and system, browser features, speed-test times and each camera's specs. Not included: photos (the small previews stay on this page), location, names, contacts or anything else on your phone.</p>
   </section>
 
-  <footer>Camera Check v3 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
+  <footer>Camera Check v4 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
 </main>
 
 <script>
 "use strict";
-const VERSION = 3;   // (2: snapMs replaces v1's grabMs; 3: shorter result, close-up with the card filling a box)
+const VERSION = 4;   // (2: snapMs replaces v1's grabMs; 3: shorter result, close-up with the card filling a box; 4: sent as a file)
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const named = (name, message) => Object.assign(new Error(message), { name });
@@ -181,7 +181,7 @@ const timeout = (p, ms, what) => Promise.race([p, sleep(ms).then(() => { throw n
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 const r1 = x => Math.round(x * 10) / 10;
 
-let R = null;          // the result: exactly what Copy / Share send
+let R = null;          // the result: exactly what the sent / saved file holds
 let cams = [];         // [{ dev, info, thumb, closeThumb }]: camera ids and previews stay on this page
 let running = false;
 
@@ -482,7 +482,7 @@ async function pair(a, b, key) {   // two cameras open at once?
 async function runCheck() {
   if (running) return;
   running = true;
-  $("run").disabled = true; $("progress").textContent = ""; $("copyNote").textContent = "";
+  $("run").disabled = true; $("progress").textContent = ""; $("sendNote").textContent = "";
   ["results", "step2", "step3"].forEach(id => { $(id).hidden = true; });
   $("closeOut").textContent = "";
   R = { tool:"camera-check", version:VERSION, when:new Date().toISOString(), phone:$("model").value.trim(),
@@ -680,7 +680,8 @@ function render() {
   $("step2").hidden = !backs.length;
   $("sendNum").textContent = backs.length ? "3" : "2";
   $("step3").hidden = false;
-  $("share").hidden = typeof navigator.share !== "function";
+  $("sendFile").hidden = !canSendFile();   // (no share sheet for files, e.g. Firefox or a computer: Save file only)
+  $("saveFile").className = $("sendFile").hidden ? "primary" : "";
   refreshOut();
 }
 
@@ -720,33 +721,42 @@ function resultText() {
   const head = ["Camera Check v" + VERSION, R.phone || d.model, osName(d), browserName(d), d.cores ? d.cores + " cores" : ""].filter(Boolean).join(" · ");
   const f = R.features, out = { ...R, features:Object.keys(f).filter(k => f[k] === true) };   // (features: the ones it has)
   if (f.barcodeFormats) out.barcodeFormats = f.barcodeFormats.length;
-  return head + "\n" + JSON.stringify(out, rounder);
+  return head + "\n" + JSON.stringify(out, rounder, 1);   // (a file: room to be readable)
 }
 function refreshOut() {
   const t = resultText();
   $("out").textContent = t;
-  $("outSize").textContent = `${(new Blob([t]).size / 1024).toFixed(1)} KB of text`;
+  $("outSize").textContent = `a ${(new Blob([t]).size / 1024).toFixed(1)} KB text file`;
 }
 
 $("run").addEventListener("click", runCheck);
 $("closeBtn").addEventListener("click", closeUp);
 $("model").addEventListener("input", () => { if (R) { R.phone = $("model").value.trim(); render(); } });
-$("copy").addEventListener("click", async () => {
-  const t = resultText(), note = s => { $("copyNote").textContent = s; };
-  try { await navigator.clipboard.writeText(t); note("Copied. Paste it into a message to the person who shared this page."); }
-  catch (e) {
-    $("outDetails").open = true;
-    const r = document.createRange(), sel = getSelection();
-    r.selectNodeContents($("out")); sel.removeAllRanges(); sel.addRange(r);
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch (er) {}
-    note(ok ? "Copied. Paste it into a message to the person who shared this page." : "The text is selected below: use your phone's Copy.");
-  }
+// The result goes as a small text file (owner 10-14: results come back through Discord, where a message stops at 2,000
+// characters without Nitro - an attachment has no such limit): the share sheet where it takes files, else a download
+function resultFile() {
+  const who = (R.phone || R.device.model || R.device.os || "phone").replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "phone";
+  const when = R.when.slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
+  return new File([resultText()], `camera-check-${who}-${when}.txt`, { type:"text/plain" });
+}
+function canSendFile() {
+  try { return !!navigator.canShare?.({ files:[new File(["x"], "x.txt", { type:"text/plain" })] }); } catch (e) { return false; }
+}
+const sendNote = s => { $("sendNote").textContent = s; };
+function saveFile() {
+  if (!R) return;
+  const f = resultFile(), url = URL.createObjectURL(f), a = document.createElement("a");
+  a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  sendNote(`Saved as ${f.name} (in your Downloads). Attach it in the chat with the person who shared this page.`);
+}
+$("sendFile").addEventListener("click", async () => {
+  if (!R) return;
+  const f = resultFile();
+  try { await navigator.share({ files:[f], title:"Camera Check result" }); sendNote("Sent. Thanks!"); }
+  catch (e) { if (e.name !== "AbortError") sendNote("Sharing didn't open: tap Save file instead, then attach the file in the chat."); }
 });
-$("share").addEventListener("click", async () => {
-  try { await navigator.share({ title:"Camera Check result", text:resultText() }); }
-  catch (e) { if (e.name !== "AbortError") $("copyNote").textContent = "Sharing didn't open: use Copy result instead."; }
-});
+$("saveFile").addEventListener("click", saveFile);
 </script>
 </body>
 </html>
