@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- One file, nothing from other sites, and no way to send anything: every network request is blocked below. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; media-src blob: mediastream:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<title>Camera Check</title>
+<style>
+:root {
+  --bg:#f3f4ef; --panel:#ffffff; --sunk:#ebede6; --fg:#1b1e19; --muted:#5c6358; --line:#d7dbd0;
+  --accent:#1d6b50; --accent-ink:#ffffff; --accent-soft:#deede5; --warn:#94560a; --warn-soft:#f5e8d4; --bad:#b0281f;
+  --sans:system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono:ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#121411; --panel:#1a1d18; --sunk:#232720; --fg:#e8ebe3; --muted:#9ea597; --line:#30352c;
+    --accent:#62cf9f; --accent-ink:#0a2318; --accent-soft:#1c3328; --warn:#e5a84f; --warn-soft:#352915; --bad:#f2857b;
+    color-scheme:dark;
+  }
+}
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+html { -webkit-text-size-adjust:100%; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 var(--sans); }
+main {
+  max-width:40rem; margin:0 auto; display:grid; gap:18px;
+  padding:calc(28px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px));
+}
+header { display:grid; gap:6px; }
+.eyebrow { margin:0; font-size:.75rem; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--accent); }
+h1 { margin:0; font-size:2rem; line-height:1.15; letter-spacing:-.01em; text-wrap:balance; }
+.lede { margin:0; color:var(--muted); max-width:34rem; }
+section.card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px; display:grid; gap:14px; min-width:0; }
+h2 { margin:0; font-size:1.15rem; display:flex; align-items:center; gap:10px; text-wrap:balance; }
+h2 .num { flex:none; width:1.7rem; height:1.7rem; border-radius:50%; display:grid; place-items:center; font-size:.85rem; background:var(--accent); color:var(--accent-ink); }
+h2 .tag { font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); background:var(--sunk); border-radius:999px; padding:2px 8px; }
+h3 { margin:0; font-size:1rem; }
+p { margin:0; }
+.hint { color:var(--muted); font-size:.88rem; }
+.field { display:grid; gap:6px; font-weight:600; font-size:.92rem; }
+.field .opt { font-weight:400; color:var(--muted); }
+.field input { font:inherit; font-size:16px; font-weight:400; min-height:46px; padding:0 12px; border-radius:10px; border:1px solid var(--line); background:var(--sunk); color:var(--fg); width:100%; }
+button { font:inherit; font-weight:650; min-height:48px; padding:0 18px; border-radius:12px; border:1px solid var(--line); background:var(--panel); color:var(--fg); cursor:pointer; }
+button.primary { background:var(--accent); color:var(--accent-ink); border-color:transparent; }
+button:disabled { opacity:.55; cursor:default; }
+.actions { display:flex; flex-wrap:wrap; gap:10px; }
+.actions button { flex:1 1 10rem; }
+
+.progress { list-style:none; margin:0; padding:0; display:grid; gap:7px; font-size:.92rem; }
+.progress:empty { display:none; }
+.progress li { display:grid; grid-template-columns:1.2rem minmax(0,1fr); column-gap:10px; }
+.progress .ico { width:1.05rem; height:1.05rem; margin-top:.18rem; border-radius:50%; border:2px solid var(--line); display:grid; place-items:center; font-size:.62rem; font-weight:800; line-height:1; }
+.progress li.run .ico { border-top-color:var(--accent); animation:spin .8s linear infinite; }
+.progress li.ok .ico { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+.progress li.ok .ico::before { content:"✓"; }
+.progress li.bad .ico { background:var(--bad); border-color:var(--bad); color:var(--panel); }
+.progress li.bad .ico::before { content:"!"; }
+.progress .txt { overflow-wrap:anywhere; }
+.progress .sub { grid-column:2; color:var(--muted); font-size:.84rem; overflow-wrap:anywhere; }
+.progress .sub:empty { display:none; }
+@keyframes spin { to { transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .progress li.run .ico { animation:none; } }
+
+.peek { display:flex; gap:12px; align-items:center; }
+.peek video { height:132px; width:auto; max-width:60%; aspect-ratio:3/4; object-fit:cover; border-radius:10px; background:#000; }
+.peek p { font-size:.88rem; color:var(--muted); overflow-wrap:anywhere; min-width:0; }
+
+.summary { font-weight:600; }
+.kv { display:grid; grid-template-columns:auto minmax(0,1fr); gap:4px 14px; margin:0; font-size:.92rem; }
+.kv dt { color:var(--muted); }
+.kv dd { margin:0; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.cams { display:grid; gap:12px; }
+.cam { display:grid; grid-template-columns:84px minmax(0,1fr); gap:12px; padding:12px; border:1px solid var(--line); border-radius:12px; }
+.cam .shot { width:84px; height:112px; object-fit:cover; border-radius:8px; background:var(--sunk); display:block; }
+.cam h3 { overflow-wrap:anywhere; }
+.cam .kv { font-size:.85rem; gap:2px 12px; }
+.badges { display:flex; flex-wrap:wrap; gap:5px; margin:5px 0 8px; }
+.badge { font-size:.72rem; font-weight:650; letter-spacing:.02em; padding:2px 8px; border-radius:999px; background:var(--sunk); color:var(--muted); }
+.badge.good { background:var(--accent-soft); color:var(--accent); }
+.badge.warn { background:var(--warn-soft); color:var(--warn); }
+.err { color:var(--bad); font-size:.85rem; overflow-wrap:anywhere; }
+details > summary { cursor:pointer; font-weight:600; font-size:.92rem; }
+details[open] > summary { margin-bottom:10px; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; }
+.chip { font-size:.78rem; padding:3px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+.chip.yes { border-color:transparent; background:var(--accent-soft); color:var(--accent); }
+.chip.yes::before { content:"✓ "; }
+.chip.no { text-decoration:line-through; text-decoration-color:var(--line); }
+
+.viewer { position:relative; margin:0 auto; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden; max-width:100%; }
+.viewer video { width:100%; height:100%; object-fit:contain; display:block; }
+.viewer .aim { position:absolute; inset:25%; border:2px dashed rgba(255,255,255,.9); border-radius:8px; box-shadow:0 0 0 9999px rgba(0,0,0,.28); pointer-events:none; }
+.viewer .vlabel { position:absolute; left:8px; right:8px; bottom:8px; color:#fff; background:rgba(0,0,0,.6); padding:6px 10px; border-radius:8px; font-size:.85rem; font-variant-numeric:tabular-nums; }
+.bars { display:grid; gap:10px; }
+.bars:empty { display:none; }
+.bar { display:grid; grid-template-columns:56px minmax(0,1fr); gap:10px; align-items:center; }
+.bar img, .bar .noimg { width:56px; height:56px; object-fit:cover; border-radius:8px; background:var(--sunk); display:block; }
+.bar .name { font-size:.88rem; overflow-wrap:anywhere; }
+.bar .name b { color:var(--accent); }
+.bar .track { height:8px; border-radius:4px; background:var(--sunk); overflow:hidden; margin-top:4px; }
+.bar .fill { height:100%; background:var(--accent); border-radius:4px; }
+.bar .val { font-size:.78rem; color:var(--muted); font-variant-numeric:tabular-nums; }
+pre.out { margin:0; font:400 .72rem/1.45 var(--mono); background:var(--sunk); border:1px solid var(--line); border-radius:10px; padding:10px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:18rem; overflow:auto; }
+.note { font-size:.9rem; font-weight:600; color:var(--accent); }
+.note:empty { display:none; }
+footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">Helping build a trading-card scanner</p>
+    <h1>Camera Check</h1>
+    <p class="lede">Checks what this phone's cameras and browser can do, so the scanner can work well on as many phones as possible. Nothing leaves your phone: when it's done, you copy the result and send it to whoever shared this page with you.</p>
+  </header>
+
+  <section class="card" id="step1">
+    <h2><span class="num">1</span>Check this phone</h2>
+    <label class="field">Phone model <span class="opt">optional (iPhones don't tell websites their model)</span>
+      <input id="model" autocomplete="off" placeholder="e.g. iPhone 15 Pro, Galaxy S24+, Pixel 8">
+    </label>
+    <button class="primary" id="run" type="button">Check my phone</button>
+    <p class="hint" id="runHint">Takes up to half a minute. Your browser will ask to use the camera: tap Allow. Each camera turns on for a moment; you don't need to aim it at anything.</p>
+    <ol class="progress" id="progress" aria-live="polite"></ol>
+    <div class="peek" id="peekWrap" hidden><video id="peek" playsinline muted></video><p id="peekLabel"></p></div>
+  </section>
+
+  <section class="card" id="results" hidden>
+    <h2>This phone</h2>
+    <dl class="kv" id="deviceFacts"></dl>
+    <details>
+      <summary>Browser features</summary>
+      <div class="chips" id="features"></div>
+    </details>
+    <h2>Cameras</h2>
+    <p class="summary" id="camSummary"></p>
+    <div class="cams" id="cams"></div>
+  </section>
+
+  <section class="card" id="step2" hidden>
+    <h2><span class="num">2</span>Close-up test <span class="tag">optional</span></h2>
+    <p>Have a trading card handy, or anything with small print? Hold it about <strong>10&nbsp;cm (4&nbsp;in)</strong> behind the phone, flat and in good light, inside the dashed box. Each back camera gets 3 seconds, and the page measures how sharp the card looks.</p>
+    <div class="viewer" id="viewer" hidden><video id="view" playsinline muted></video><div class="aim"></div><div class="vlabel" id="viewLabel"></div></div>
+    <button id="closeBtn" type="button">Start close-up test</button>
+    <div class="bars" id="closeOut"></div>
+  </section>
+
+  <section class="card" id="step3" hidden>
+    <h2><span class="num" id="sendNum">3</span>Send the result</h2>
+    <p>Copy it, then paste it into a text or email to the person who shared this page.</p>
+    <div class="actions">
+      <button class="primary" id="copy" type="button">Copy result</button>
+      <button id="share" type="button" hidden>Share…</button>
+    </div>
+    <p class="note" id="copyNote" aria-live="polite"></p>
+    <details id="outDetails">
+      <summary>See exactly what's in the result (<span id="outSize"></span>)</summary>
+      <pre class="out" id="out"></pre>
+    </details>
+    <p class="hint">Included: the phone model and system, browser features, speed-test times and each camera's specs. Not included: photos (the small previews stay on this page), location, names, contacts or anything else on your phone.</p>
+  </section>
+
+  <footer>Camera Check v1 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
+</main>
+
+<script>
+"use strict";
+const VERSION = 1;
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const named = (name, message) => Object.assign(new Error(message), { name });
+const timeout = (p, ms, what) => Promise.race([p, sleep(ms).then(() => { throw named("Timeout", what + " took too long"); })]);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const r1 = x => Math.round(x * 10) / 10;
+
+let R = null;          // the result: exactly what Copy / Share send
+let cams = [];         // [{ dev, info, thumb, closeThumb }]: camera ids and previews stay on this page
+let running = false;
+
+// ---------- small helpers ----------
+const DROP = new Set(["deviceId", "groupId"]);   // per-site camera ids: of no use to anyone, left out
+function plain(o) {
+  if (o == null || typeof o !== "object") return o;
+  if (Array.isArray(o)) return o.map(plain);
+  const r = {};
+  for (const k in o) { if (DROP.has(k)) continue; const v = o[k]; if (typeof v !== "function") r[k] = plain(v); }
+  return r;
+}
+const rounder = (k, v) => typeof v === "number" && isFinite(v) && !Number.isInteger(v) ? +v.toPrecision(4) : v;
+const stop = s => { try { s?.getTracks().forEach(t => t.stop()); } catch (e) {} };
+
+function step(text) {   // one line in the progress list
+  const li = document.createElement("li");
+  li.className = "run";
+  li.innerHTML = '<span class="ico" aria-hidden="true"></span><span class="txt"></span><span class="sub"></span>';
+  li.querySelector(".txt").textContent = text;
+  $("progress").append(li);
+  const sub = t => { li.querySelector(".sub").textContent = t || ""; };
+  return { done:t => { li.className = "ok"; sub(t); }, fail:t => { li.className = "bad"; sub(t); } };
+}
+
+function openCam(video, ms = 8000) {   // getUserMedia with a time limit; a camera that answers late is turned off again
+  return new Promise((resolve, reject) => {
+    let late = false;
+    const t = setTimeout(() => { late = true; reject(named("Timeout", "the camera took too long to open")); }, ms);
+    navigator.mediaDevices.getUserMedia({ video, audio:false }).then(
+      s => { clearTimeout(t); if (late) stop(s); else resolve(s); },
+      e => { clearTimeout(t); if (!late) reject(e); });
+  });
+}
+const firstFrame = v => timeout(new Promise(r => {
+  if (v.readyState >= 2 && v.videoWidth) r(); else v.addEventListener("loadeddata", () => r(), { once:true });
+}), 5000, "the first picture");
+async function show(v, s) { v.srcObject = s; try { await v.play(); } catch (e) {} await firstFrame(v); }
+
+function explain(e) {
+  switch (e?.name) {
+    case "NotAllowedError": return "Camera not allowed. To include the cameras, allow camera access for this page in your browser's settings, then tap Check again.";
+    case "NotFoundError": return "No camera found.";
+    case "NotReadableError": return "The camera is busy: close other apps using it and try again.";
+    case "Timeout": return "No answer from the camera.";
+    default: return (e?.name || "Error") + (e?.message ? ": " + e.message : "");
+  }
+}
+
+// ---------- the phone and its browser ----------
+async function checkDevice() {
+  const n = navigator, d = R.device;
+  d.userAgent = n.userAgent;
+  if (n.userAgentData?.getHighEntropyValues) {   // Chrome and friends: the real model and system version (the user agent hides them)
+    try {
+      const h = await timeout(n.userAgentData.getHighEntropyValues(["model", "platformVersion", "fullVersionList", "architecture", "bitness", "formFactors"]), 3000, "browser details");
+      if (h.model) d.model = h.model;
+      d.platform = h.platform; d.platformVersion = h.platformVersion; d.mobile = h.mobile;
+      d.browserVersions = (h.fullVersionList || []).filter(b => !/not.?a.?brand/i.test(b.brand)).map(b => `${b.brand} ${b.version}`);
+      if (h.architecture) d.arch = h.architecture + (h.bitness ? "-" + h.bitness : "");
+      if (h.formFactors?.length) d.formFactors = h.formFactors;
+    } catch (e) {}
+  }
+  d.cores = n.hardwareConcurrency || null;
+  d.memoryGB = n.deviceMemory ?? null;   // (Chrome only: rounded; phones stop at 8, meaning "8 or more")
+  d.screen = { w:screen.width, h:screen.height, dpr:devicePixelRatio, depth:screen.colorDepth };
+  d.touchPoints = n.maxTouchPoints;
+  try {   // graphics chip, from WebGL
+    const c = document.createElement("canvas"), gl = c.getContext("webgl2") || c.getContext("webgl");
+    if (gl) {
+      const ext = gl.getExtension("WEBGL_debug_renderer_info");
+      d.gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+      d.gpuVendor = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+      d.webgl = typeof WebGL2RenderingContext === "function" && gl instanceof WebGL2RenderingContext ? 2 : 1;
+      d.maxTexture = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+    }
+  } catch (e) {}
+  if (n.gpu) {   // WebGPU: computing on the graphics chip
+    try {
+      const a = await timeout(n.gpu.requestAdapter(), 4000, "WebGPU");
+      if (a) {
+        const i = a.info || (a.requestAdapterInfo ? await a.requestAdapterInfo() : {});
+        d.webgpu = { vendor:i.vendor || "", architecture:i.architecture || "", device:i.device || "", description:i.description || "",
+          f16:a.features.has("shader-f16"), maxBufferMB:Math.round(a.limits.maxBufferSize / 1048576) };
+      } else d.webgpu = "no adapter";
+    } catch (e) { d.webgpu = "error: " + e.name; }
+  } else d.webgpu = false;
+  try { const e = await timeout(n.storage?.estimate?.() ?? Promise.resolve(null), 3000, "storage"); if (e) d.storageQuotaGB = r1(e.quota / 1e9); } catch (e) {}
+  const cn = n.connection;
+  if (cn) d.network = { type:cn.type, effective:cn.effectiveType, downMbps:cn.downlink, rttMs:cn.rtt, saveData:cn.saveData };
+}
+
+// WebAssembly feature tests: tiny modules that are only valid where the feature exists
+const WASM = {
+  simd:[0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11],
+  relaxedSimd:[0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,15,1,13,0,65,1,253,15,65,2,253,15,253,128,2,11],
+  threads:[0,97,115,109,1,0,0,0,1,4,1,96,0,0,3,2,1,0,5,4,1,3,1,1,10,11,1,9,0,65,0,254,16,2,0,26,11],
+};
+const wasmOk = b => { try { return WebAssembly.validate(new Uint8Array(b)); } catch (e) { return false; } };
+
+async function checkFeatures() {
+  const f = R.features, w = window, n = navigator;
+  f.secure = w.isSecureContext; f.isolated = !!w.crossOriginIsolated; f.sharedArrayBuffer = typeof SharedArrayBuffer === "function";
+  f.wasm = typeof WebAssembly === "object";
+  f.wasmSimd = f.wasm && wasmOk(WASM.simd); f.wasmRelaxedSimd = f.wasm && wasmOk(WASM.relaxedSimd); f.wasmThreads = f.wasm && wasmOk(WASM.threads);
+  f.webgl2 = R.device.webgl === 2; f.webgpu = !!(R.device.webgpu && typeof R.device.webgpu === "object");
+  f.imageCapture = typeof w.ImageCapture === "function";
+  f.videoFrameCallback = "requestVideoFrameCallback" in HTMLVideoElement.prototype;
+  f.trackProcessor = typeof w.MediaStreamTrackProcessor === "function";
+  f.webCodecs = typeof w.VideoDecoder === "function";
+  f.offscreenCanvas = typeof w.OffscreenCanvas === "function";
+  f.barcodeDetector = typeof w.BarcodeDetector === "function";
+  f.textDetector = typeof w.TextDetector === "function";
+  f.wakeLock = !!n.wakeLock; f.vibrate = typeof n.vibrate === "function";
+  f.share = typeof n.share === "function";
+  try { f.shareFiles = !!n.canShare?.({ files:[new File(["x"], "x.txt", { type:"text/plain" })] }); } catch (e) { f.shareFiles = false; }
+  f.fullscreen = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  f.orientationLock = typeof screen.orientation?.lock === "function";
+  f.serviceWorker = "serviceWorker" in n;
+  if (f.barcodeDetector) { try { f.barcodeFormats = await timeout(w.BarcodeDetector.getSupportedFormats(), 3000, "barcode formats"); } catch (e) {} }
+}
+
+// ---------- speed: number crunching on one core and on several at once, and picture work ----------
+function mm(N) {   // a N x N matrix multiply (192: 7 million multiply-adds)
+  const a = new Float32Array(N * N), b = new Float32Array(N * N), c = new Float32Array(N * N);
+  for (let i = 0; i < N * N; i++) { a[i] = (i % 7) / 7; b[i] = (i % 11) / 11; }
+  for (let i = 0; i < N; i++) for (let k = 0; k < N; k++) {
+    const x = a[i * N + k], o = k * N, r = i * N;
+    for (let j = 0; j < N; j++) c[r + j] += x * b[o + j];
+  }
+  return c[N + 1];
+}
+const WORKER_SRC = mm.toString() + ";onmessage=e=>{const t=performance.now();let s=0;for(let r=0;r<e.data.reps;r++)s+=mm(e.data.n);postMessage({ms:performance.now()-t,s})};";
+
+function pictureMs() {   // shrink a busy full-HD picture to half and read its pixels as grey (what a scanner does per frame)
+  const src = document.createElement("canvas"); src.width = 1920; src.height = 1080;
+  const g = src.getContext("2d");
+  for (let i = 0; i < 60; i++) {
+    g.fillStyle = `hsl(${i * 37 % 360}, 60%, ${30 + i % 5 * 10}%)`;
+    g.fillRect(i * 97 % 1800, i * 53 % 1000, 120 + i % 7 * 20, 80 + i % 5 * 20);
+  }
+  g.fillStyle = "#000"; g.font = "48px sans-serif";
+  for (let y = 60; y < 1080; y += 70) g.fillText("Card scanner test 0123456789", 40, y);
+  const dst = document.createElement("canvas"); dst.width = 960; dst.height = 540;
+  const x = dst.getContext("2d", { willReadFrequently:true });
+  let best = Infinity, s = 0;
+  for (let r = 0; r < 6; r++) {
+    const t = performance.now();
+    x.drawImage(src, 0, 0, 960, 540);
+    const p = x.getImageData(0, 0, 960, 540).data;
+    for (let i = 0; i < p.length; i += 4) s += (p[i] * 77 + p[i + 1] * 150 + p[i + 2] * 29) >> 8;
+    best = Math.min(best, performance.now() - t);
+  }
+  return r1(best);
+}
+
+async function speedTests() {
+  const sp = R.speed;
+  mm(64);
+  let best = Infinity;
+  for (let r = 0; r < 5; r++) { const t = performance.now(); mm(192); best = Math.min(best, performance.now() - t); }
+  sp.oneCoreMs = r1(best);
+  sp.pictureMs = pictureMs();
+  // the same work on 1, 2, 4... cores at once: how much more gets done with several (phones mix fast and slow cores)
+  const most = Math.max(1, Math.min(8, navigator.hardwareConcurrency || 1));
+  const ks = [...new Set([1, 2, 4, most])].filter(k => k <= most).sort((a, b) => a - b);
+  let url = null;
+  try {
+    url = URL.createObjectURL(new Blob([WORKER_SRC], { type:"text/javascript" }));
+    sp.coresMs = {};
+    for (const k of ks) {
+      const ws = Array.from({ length:k }, () => new Worker(url));
+      const ask = (w, reps) => new Promise((res, rej) => { w.onmessage = e => res(e.data.ms); w.onerror = e => rej(named("WorkerError", e.message || "worker failed")); w.postMessage({ n:192, reps }); });
+      try {
+        await timeout(Promise.all(ws.map(w => ask(w, 2))), 20000, "warm-up");
+        const t0 = performance.now();
+        await timeout(Promise.all(ws.map(w => ask(w, 6))), 40000, "speed test");
+        sp.coresMs[k] = r1(performance.now() - t0);
+      } finally { ws.forEach(w => w.terminate()); }
+    }
+    const one = sp.coresMs[1];
+    sp.speedup = Object.fromEntries(Object.entries(sp.coresMs).map(([k, ms]) => [k, Math.round(k * one / ms * 100) / 100]));
+  } catch (e) { sp.workerError = e.name + ": " + e.message; }
+  finally { if (url) URL.revokeObjectURL(url); }
+}
+
+// ---------- the cameras ----------
+function facingOf(label, caps, settings) {
+  const f = settings?.facingMode || (caps?.facingMode || [])[0];
+  if (f === "environment") return "back";
+  if (f === "user") return "front";
+  if (/front|user|facetime/i.test(label)) return "front";
+  if (/back|rear|environment/i.test(label)) return "back";
+  return f || "unknown";
+}
+const backFirst = d => /front|user|facetime/i.test(d.label) ? 2 : /back|rear|environment/i.test(d.label) ? 0 : 1;
+
+function countFps(v, ms) {   // frames the camera actually delivers per second
+  if (!v.requestVideoFrameCallback) return Promise.resolve(null);
+  return new Promise(res => {
+    let n = 0, t0 = null, done = false;
+    const fin = x => { if (!done) { done = true; res(x); } };
+    const tick = now => {
+      if (done) return;
+      if (t0 === null) t0 = now; else n++;
+      if (now - t0 >= ms) return fin(r1(n * 1000 / (now - t0)));
+      v.requestVideoFrameCallback(tick);
+    };
+    v.requestVideoFrameCallback(tick);
+    setTimeout(() => fin(t0 === null ? 0 : null), ms + 2000);
+  });
+}
+function grabMs(v) {   // copy one camera frame into a 1280-wide picture and read its pixels
+  const W = 1280, H = Math.round(W * v.videoHeight / v.videoWidth) || 720;
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d", { willReadFrequently:true }), t = [];
+  for (let i = 0; i < 4; i++) { const t0 = performance.now(); x.drawImage(v, 0, 0, W, H); x.getImageData(0, 0, W, H); t.push(performance.now() - t0); }
+  const rest = t.slice(1).sort((a, b) => a - b);   // (the first is a warm-up)
+  return r1(rest[1]);
+}
+function thumb(v, w = 240) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = Math.round(w * v.videoHeight / v.videoWidth) || w;
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.7);
+}
+
+async function probe(d, i, total) {
+  const info = { label:d.label || "(no name)" }, c = { dev:d, info, thumb:null, closeThumb:null };
+  let s = null;
+  const t0 = performance.now();
+  try {
+    s = await openCam({ deviceId:{ exact:d.deviceId }, width:{ ideal:3840 }, height:{ ideal:2160 } });
+    info.openMs = Math.round(performance.now() - t0);
+    const tr = s.getVideoTracks()[0];
+    info.settings = plain(tr.getSettings());
+    info.capabilities = plain(tr.getCapabilities ? tr.getCapabilities() : {});
+    info.facing = facingOf(info.label, info.capabilities, info.settings);
+    if (typeof ImageCapture === "function") {
+      try { info.photo = plain(await timeout(new ImageCapture(tr).getPhotoCapabilities(), 4000, "photo check")); }
+      catch (e) { info.photoError = e.name; }
+    }
+    const v = $("peek");
+    $("peekWrap").hidden = false;
+    $("peekLabel").textContent = `Looking through camera ${i + 1} of ${total}: ${info.label}`;
+    await show(v, s);
+    info.video = `${v.videoWidth}x${v.videoHeight}`;
+    await sleep(300);
+    info.fps = await countFps(v, 1000);
+    info.grabMs = grabMs(v);
+    c.thumb = thumb(v);
+  } catch (e) {
+    info.error = `${e.name}: ${e.message}`;
+    if (!info.facing) info.facing = facingOf(info.label);
+  } finally {
+    stop(s); $("peek").srcObject = null;
+    await sleep(250);   // (some Android phones refuse the next camera while this one is still closing)
+  }
+  return c;
+}
+
+async function pair(a, b, key) {   // two cameras open at once?
+  let s1 = null, s2 = null;
+  try {
+    s1 = await openCam({ deviceId:{ exact:a.dev.deviceId } });
+    s2 = await openCam({ deviceId:{ exact:b.dev.deviceId } });
+    await sleep(500);
+    const st = [s1, s2].map(s => { const t = s.getVideoTracks()[0]; return t.readyState === "live" && !t.muted ? "live" : t.readyState + (t.muted ? "/muted" : ""); });
+    R.together[key] = st.every(x => x === "live") ? "yes" : "no (" + st.join(", ") + ")";
+  } catch (e) { R.together[key] = "no (" + e.name + ")"; }
+  finally { stop(s1); stop(s2); await sleep(250); }
+}
+
+// ---------- step 1 ----------
+async function runCheck() {
+  if (running) return;
+  running = true;
+  $("run").disabled = true; $("progress").textContent = ""; $("copyNote").textContent = "";
+  ["results", "step2", "step3"].forEach(id => { $(id).hidden = true; });
+  $("closeOut").textContent = "";
+  R = { tool:"camera-check", version:VERSION, when:new Date().toISOString(), phone:$("model").value.trim(),
+        device:{}, speed:{}, features:{}, cameras:[], together:{}, closeup:null };
+  cams = [];
+  const md = navigator.mediaDevices;
+  let devs = null;
+  // the camera question first, while the tap is fresh
+  if (!md?.getUserMedia) {
+    R.cameraError = window.isSecureContext ? "no camera access in this browser" : "page not secure";
+    step("Camera").fail(window.isSecureContext ? "This browser doesn't let web pages use the camera." : "Cameras can only be checked on a secure (https) page.");
+  } else {
+    const p = step("Camera permission");
+    try {
+      stop(await openCam({ facingMode:{ ideal:"environment" } }, 60000));
+      await sleep(250);
+      devs = (await md.enumerateDevices()).filter(d => d.kind === "videoinput");
+      p.done(`${devs.length} camera${devs.length === 1 ? "" : "s"} offered to the browser`);
+    } catch (e) { R.cameraError = e.name; p.fail(explain(e)); }
+  }
+  const pd = step("Phone and browser");
+  try { await checkDevice(); await checkFeatures(); pd.done([R.device.model || R.phone, osName(R.device), browserName(R.device)].filter(Boolean).join(" · ")); }
+  catch (e) { pd.fail(explain(e)); }
+  const ps = step("Speed test");
+  await sleep(50);
+  try { await speedTests(); ps.done(`one core ${R.speed.oneCoreMs} ms`); } catch (e) { ps.fail(explain(e)); }
+  if (devs?.length) {
+    const order = [...devs].sort((a, b) => backFirst(a) - backFirst(b));
+    for (let i = 0; i < order.length; i++) {
+      const pc = step(`Camera ${i + 1} of ${order.length}: ${order[i].label || "(no name)"}`);
+      const c = await probe(order[i], i, order.length);
+      cams.push(c); R.cameras.push(c.info);
+      if (c.info.error) pc.fail(explain({ name:c.info.error.split(":")[0], message:c.info.error.split(": ").slice(1).join(": ") }));
+      else pc.done([c.info.video, c.info.fps ? c.info.fps + " fps" : ""].filter(Boolean).join(" · "));
+    }
+    $("peekWrap").hidden = true;
+    const ok = cams.filter(c => !c.info.error), backs = ok.filter(c => c.info.facing === "back"), fronts = ok.filter(c => c.info.facing === "front");
+    if (backs.length > 1 || (backs.length && fronts.length)) {
+      const pt = step("Two cameras at once");
+      if (backs.length > 1) await pair(backs[0], backs[1], "twoBack");
+      if (fronts.length) await pair(backs[0], fronts[0], "backAndFront");
+      pt.done(Object.entries(R.together).map(([k, v]) => `${k === "twoBack" ? "two back" : "back + front"}: ${v}`).join(" · "));
+    }
+  }
+  render();
+  running = false;
+  $("run").disabled = false; $("run").textContent = "Check again";
+}
+
+// ---------- step 2: close-up sharpness per back camera ----------
+const dc = document.createElement("canvas"), dx = dc.getContext("2d", { willReadFrequently:true });
+function detailOf(v) {   // how sharp the middle of the picture is: mean square of the Laplacian over the middle half, at most 640 wide
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw) return 0;
+  const cw = Math.round(vw / 2), ch = Math.round(vh / 2), W = Math.min(640, cw), H = Math.round(W * ch / cw);
+  dc.width = W; dc.height = H;
+  dx.drawImage(v, (vw - cw) / 2, (vh - ch) / 2, cw, ch, 0, 0, W, H);
+  const p = dx.getImageData(0, 0, W, H).data, g = new Float32Array(W * H);
+  for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = p[j] * 0.299 + p[j + 1] * 0.587 + p[j + 2] * 0.114;
+  let s = 0;
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x, l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - W] - g[i + W];
+    s += l * l;
+  }
+  return s / ((W - 2) * (H - 2));
+}
+
+async function closeUp() {
+  if (running) return;
+  const backs = cams.filter(c => c.info.facing === "back" && !c.info.error);
+  if (!backs.length) return;
+  running = true;
+  $("closeBtn").disabled = true; $("run").disabled = true;
+  const out = { asked:"card about 10 cm away", cameras:[] };
+  const viewer = $("viewer"), v = $("view");
+  viewer.hidden = false;
+  viewer.scrollIntoView({ behavior:"smooth", block:"center" });
+  for (let i = 0; i < backs.length; i++) {
+    const c = backs[i], row = { label:c.info.label };
+    let s = null;
+    $("viewLabel").textContent = `${c.info.label} · ${i + 1} of ${backs.length} · opening`;
+    try {
+      s = await openCam({ deviceId:{ exact:c.dev.deviceId }, width:{ ideal:1920 }, height:{ ideal:1080 } });
+      await show(v, s);
+      const ar = v.videoWidth / v.videoHeight;
+      viewer.style.aspectRatio = `${v.videoWidth} / ${v.videoHeight}`;
+      viewer.style.width = `min(100%, ${r1(58 * ar)}vh)`;
+      const end = performance.now() + 3000, samples = [];
+      while (performance.now() < end) {
+        $("viewLabel").textContent = `${c.info.label} · ${i + 1} of ${backs.length} · ${Math.ceil((end - performance.now()) / 1000)}`;
+        if (end - performance.now() < 1600) samples.push(detailOf(v));
+        await sleep(150);
+      }
+      samples.sort((a, b) => a - b);
+      row.detail = Math.round(samples[samples.length - 1]);
+      row.detailMedian = Math.round(samples[samples.length >> 1]);
+      row.video = `${v.videoWidth}x${v.videoHeight}`;
+      const st = s.getVideoTracks()[0].getSettings();
+      if (st.focusDistance) row.focusDistance = st.focusDistance;
+      if (st.zoom != null) row.zoom = st.zoom;
+      c.closeThumb = thumb(v, 200);
+    } catch (e) { row.error = `${e.name}: ${e.message}`; }
+    finally { stop(s); v.srcObject = null; await sleep(250); }
+    out.cameras.push(row);
+    renderClose(out, backs);
+  }
+  viewer.hidden = true;
+  const ranked = out.cameras.filter(r => r.detail != null).sort((a, b) => b.detail - a.detail);
+  out.sharpest = ranked[0]?.label ?? null;
+  R.closeup = out;
+  renderClose(out, backs);
+  refreshOut();
+  running = false;
+  $("closeBtn").disabled = false; $("run").disabled = false; $("closeBtn").textContent = "Run close-up test again";
+}
+
+// ---------- showing it ----------
+function osName(d) {
+  const ua = d.userAgent || "";
+  let m;
+  if (/iPhone|iPad|iPod/.test(ua) && (m = ua.match(/OS (\d+)_(\d+)/))) return `${/iPad/.test(ua) ? "iPadOS" : "iOS"} ${m[1]}.${m[2]}`;
+  if (d.platform === "Android" && d.platformVersion) return "Android " + d.platformVersion.replace(/\.0(\.0)?$/, "");
+  if ((m = ua.match(/Android ([\d.]+)/))) return "Android " + m[1];
+  if (d.platform) return d.platform + (d.platformVersion ? " " + d.platformVersion.replace(/\.0(\.0)?$/, "") : "");
+  if (/Mac OS X/.test(ua)) return "macOS";
+  if (/Windows/.test(ua)) return "Windows";
+  return /Linux/.test(ua) ? "Linux" : "";
+}
+function browserName(d) {
+  const ua = d.userAgent || "";
+  let m;
+  for (const [re, name] of [[/EdgiOS\/(\d+)/, "Edge"], [/CriOS\/(\d+)/, "Chrome"], [/FxiOS\/(\d+)/, "Firefox"], [/SamsungBrowser\/(\d+)/, "Samsung Internet"],
+                            [/EdgA?\/(\d+)/, "Edge"], [/OPR\/(\d+)/, "Opera"], [/Firefox\/(\d+)/, "Firefox"]])
+    if ((m = ua.match(re))) return `${name} ${m[1]}`;
+  const b = (d.browserVersions || []).find(x => !/^Chromium /.test(x)) || (d.browserVersions || [])[0];
+  if (b && (m = b.match(/^(.*) (\d+)[\d.]*$/))) return `${m[1].replace(/^Google /, "")} ${m[2]}`;
+  if ((m = ua.match(/Version\/([\d.]+).*Safari/))) return "Safari " + m[1];
+  return (m = ua.match(/Chrome\/(\d+)/)) ? "Chrome " + m[1] : "";
+}
+const cm = m => m >= 1 ? `${r1(m)} m` : `${Math.round(m * 100)} cm (${(m * 39.37).toFixed(1)} in)`;
+const num = x => +(+x).toFixed(2);
+
+function render() {
+  const d = R.device, sp = R.speed, rows = [];
+  const iphone = /iPhone|iPad/.test(d.userAgent || "");
+  rows.push(["Phone", R.phone ? R.phone + (d.model && d.model !== R.phone ? ` (reports ${d.model})` : "") : d.model || (iphone ? "iPhone (model not shared)" : "not shared by the browser")]);
+  rows.push(["System", osName(d) || "unknown"]);
+  rows.push(["Browser", browserName(d) || "unknown"]);
+  rows.push(["Processor", [d.cores ? `${d.cores} cores` : "", d.memoryGB ? `${d.memoryGB}${d.memoryGB === 8 ? "+" : ""} GB memory` : ""].filter(Boolean).join(" · ") || "not shared"]);
+  rows.push(["Graphics", (d.gpu || "unknown") + (R.features.webgpu ? " · WebGPU" : "")]);
+  if (d.screen) rows.push(["Screen", `${d.screen.w} × ${d.screen.h} at ${num(d.screen.dpr)}× (${Math.round(d.screen.w * d.screen.dpr)} × ${Math.round(d.screen.h * d.screen.dpr)} pixels)`]);
+  if (sp.oneCoreMs != null) {
+    const ks = Object.keys(sp.speedup || {}).map(Number).sort((a, b) => a - b), top = ks[ks.length - 1];
+    rows.push(["Speed", `${sp.oneCoreMs} ms on one core (lower is faster)` + (top > 1 ? ` · ${sp.speedup[top]}× the work on ${top} cores at once` : "")]);
+  }
+  if (sp.pictureMs != null) rows.push(["Picture work", `${sp.pictureMs} ms to shrink and read a full-HD picture`]);
+  if (d.storageQuotaGB) rows.push(["Website storage", `${d.storageQuotaGB} GB allowed`]);
+  if (d.network) rows.push(["Network", [d.network.type, d.network.effective, d.network.downMbps ? `about ${d.network.downMbps} Mbps` : ""].filter(Boolean).join(" · ")]);
+  $("deviceFacts").innerHTML = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+
+  const F = [["wasmSimd", "WebAssembly SIMD"], ["wasmRelaxedSimd", "Relaxed SIMD"], ["wasmThreads", "WebAssembly threads"], ["webgpu", "WebGPU"],
+    ["webgl2", "WebGL 2"], ["imageCapture", "Full-size photos (ImageCapture)"], ["videoFrameCallback", "Frame-by-frame video"],
+    ["trackProcessor", "Raw camera frames"], ["webCodecs", "WebCodecs"], ["offscreenCanvas", "OffscreenCanvas"], ["barcodeDetector", "Built-in barcode reader"],
+    ["textDetector", "Built-in text reader"], ["wakeLock", "Keep screen on"], ["vibrate", "Vibrate"], ["share", "Share sheet"], ["shareFiles", "Share files"],
+    ["fullscreen", "Full screen"], ["orientationLock", "Rotation lock"], ["serviceWorker", "Works offline"]];
+  $("features").innerHTML = F.map(([k, label]) => `<span class="chip ${R.features[k] ? "yes" : "no"}">${esc(label)}</span>`).join("");
+
+  const ok = cams.filter(c => !c.info.error), backs = ok.filter(c => c.info.facing === "back"), fronts = ok.filter(c => c.info.facing === "front");
+  if (!cams.length) $("camSummary").textContent = R.cameraError ? explain({ name:R.cameraError }) : "No cameras checked.";
+  else {
+    const near = backs.map(c => [c, c.info.capabilities?.focusDistance?.min]).filter(x => x[1] > 0).sort((a, b) => a[1] - b[1])[0];
+    $("camSummary").textContent = `${cams.length} camera${cams.length === 1 ? "" : "s"}: ${backs.length} back, ${fronts.length} front`
+      + (cams.length > ok.length ? `, ${cams.length - ok.length} wouldn't open` : "") + "."
+      + (near ? ` Closest focus on the back: ${cm(near[1])} (${near[0].info.label}).` : "");
+  }
+  $("cams").innerHTML = cams.map(camCard).join("");
+  $("results").hidden = false;
+  $("step2").hidden = !backs.length;
+  $("sendNum").textContent = backs.length ? "3" : "2";
+  $("step3").hidden = false;
+  $("share").hidden = typeof navigator.share !== "function";
+  refreshOut();
+}
+
+function camCard(c) {
+  const i = c.info, cap = i.capabilities || {}, ph = i.photo || {}, b = [];
+  const shot = c.thumb ? `<img class="shot" src="${c.thumb}" alt="">` : `<div class="shot"></div>`;
+  b.push(`<span class="badge">${i.facing === "back" ? "Back" : i.facing === "front" ? "Front" : "Unknown side"}</span>`);
+  if (i.error) return `<div class="cam">${shot}<div><h3>${esc(i.label)}</h3><div class="badges">${b.join("")}</div><p class="err">Couldn't open it (${esc(i.error)})</p></div></div>`;
+  const modes = cap.focusMode || [], af = modes.includes("continuous") || modes.includes("single-shot");
+  if (modes.length) b.push(af ? `<span class="badge good">Autofocus</span>` : `<span class="badge warn">Fixed focus</span>`);
+  if ((cap.zoom?.min ?? 1) < 1) b.push(`<span class="badge good">Switches lenses itself</span>`);
+  if (cap.torch) b.push(`<span class="badge">Torch</span>`);
+  const near = cap.focusDistance?.min > 0 ? cap.focusDistance.min : null, rows = [];
+  rows.push(["Closest focus", near ? cm(near) : modes.length && !af ? "fixed-focus lens" : "not reported"]);
+  rows.push(["Video", (cap.width?.max ? `up to ${cap.width.max} × ${cap.height?.max}` : "size not reported") + (i.fps ? ` · ${i.fps} fps at ${i.video.replace("x", " × ")}` : "")]);
+  if (ph.imageWidth?.max) rows.push(["Still photo", `up to ${ph.imageWidth.max} × ${ph.imageHeight?.max}`]);
+  rows.push(["Zoom", cap.zoom?.max ? `${num(cap.zoom.min)}–${num(cap.zoom.max)}×` : "none"]);
+  if (i.openMs != null) rows.push(["Opens in", `${i.openMs} ms`]);
+  return `<div class="cam">${shot}<div style="min-width:0"><h3>${esc(i.label)}</h3><div class="badges">${b.join("")}</div>`
+    + `<dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl></div></div>`;
+}
+
+function renderClose(out, backs) {
+  const top = Math.max(1, ...out.cameras.map(r => r.detail || 0));
+  $("closeOut").innerHTML = out.cameras.map((r, i) => {
+    const c = backs[i], img = c?.closeThumb ? `<img src="${c.closeThumb}" alt="">` : `<div class="noimg"></div>`;
+    const best = out.sharpest && r.label === out.sharpest;
+    return `<div class="bar">${img}<div style="min-width:0"><div class="name">${esc(r.label)}${best ? " · <b>sharpest</b>" : ""}</div>`
+      + (r.error ? `<p class="err">${esc(r.error)}</p>` : `<div class="track"><div class="fill" style="width:${Math.round(100 * r.detail / top)}%"></div></div><div class="val">detail ${r.detail}</div>`)
+      + `</div></div>`;
+  }).join("");
+}
+
+function resultText() {
+  if (!R) return "";
+  const d = R.device;
+  const head = ["Camera Check v" + VERSION, R.phone || d.model, osName(d), browserName(d), d.cores ? d.cores + " cores" : ""].filter(Boolean).join(" · ");
+  return head + "\n" + JSON.stringify(R, rounder);
+}
+function refreshOut() {
+  const t = resultText();
+  $("out").textContent = t;
+  $("outSize").textContent = `${(new Blob([t]).size / 1024).toFixed(1)} KB of text`;
+}
+
+$("run").addEventListener("click", runCheck);
+$("closeBtn").addEventListener("click", closeUp);
+$("model").addEventListener("input", () => { if (R) { R.phone = $("model").value.trim(); render(); } });
+$("copy").addEventListener("click", async () => {
+  const t = resultText(), note = s => { $("copyNote").textContent = s; };
+  try { await navigator.clipboard.writeText(t); note("Copied. Paste it into a message to the person who shared this page."); }
+  catch (e) {
+    $("outDetails").open = true;
+    const r = document.createRange(), sel = getSelection();
+    r.selectNodeContents($("out")); sel.removeAllRanges(); sel.addRange(r);
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (er) {}
+    note(ok ? "Copied. Paste it into a message to the person who shared this page." : "The text is selected below: use your phone's Copy.");
+  }
+});
+$("share").addEventListener("click", async () => {
+  try { await navigator.share({ title:"Camera Check result", text:resultText() }); }
+  catch (e) { if (e.name !== "AbortError") $("copyNote").textContent = "Sharing didn't open: use Copy result instead."; }
+});
+</script>
+</body>
+</html>
