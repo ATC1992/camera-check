@@ -96,7 +96,7 @@ details[open] > summary { margin-bottom:10px; }
 
 .viewer { position:relative; margin:0 auto; width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; overflow:hidden; max-width:100%; }
 .viewer video { width:100%; height:100%; object-fit:contain; display:block; }
-.viewer .aim { position:absolute; inset:25%; border:2px dashed rgba(255,255,255,.9); border-radius:8px; box-shadow:0 0 0 9999px rgba(0,0,0,.28); pointer-events:none; }
+.viewer .aim { position:absolute; left:25%; top:25%; width:50%; height:50%; border:2px dashed rgba(255,255,255,.9); border-radius:8px; box-shadow:0 0 0 9999px rgba(0,0,0,.28); pointer-events:none; }
 .viewer .vlabel { position:absolute; left:8px; right:8px; bottom:8px; color:#fff; background:rgba(0,0,0,.6); padding:6px 10px; border-radius:8px; font-size:.85rem; font-variant-numeric:tabular-nums; }
 .bars { display:grid; gap:10px; }
 .bars:empty { display:none; }
@@ -141,13 +141,14 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
     </details>
     <h2>Cameras</h2>
     <p class="summary" id="camSummary"></p>
+    <p class="hint" id="camNote" hidden>This browser doesn't share its cameras' focus or zoom details. If Chrome is on this phone, running the check in Chrome as well gives the full picture. The close-up test below still works here.</p>
     <div class="cams" id="cams"></div>
   </section>
 
   <section class="card" id="step2" hidden>
     <h2><span class="num">2</span>Close-up test <span class="tag">optional</span></h2>
-    <p>Have a trading card handy, or anything with small print? Hold it about <strong>10&nbsp;cm (4&nbsp;in)</strong> behind the phone, flat and in good light, inside the dashed box. Each back camera gets 3 seconds, and the page measures how sharp the card looks.</p>
-    <div class="viewer" id="viewer" hidden><video id="view" playsinline muted></video><div class="aim"></div><div class="vlabel" id="viewLabel"></div></div>
+    <p>Have a trading card handy, or anything card-sized with small print? Each back camera gets 5 seconds: move the card until it <strong>fills the dashed box</strong> (closer for wide lenses), keep it flat and still in good light, and the page measures how sharp it looks.</p>
+    <div class="viewer" id="viewer" hidden><video id="view" playsinline muted></video><div class="aim" id="aim"></div><div class="vlabel" id="viewLabel"></div></div>
     <button id="closeBtn" type="button">Start close-up test</button>
     <div class="bars" id="closeOut"></div>
   </section>
@@ -167,12 +168,12 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
     <p class="hint">Included: the phone model and system, browser features, speed-test times and each camera's specs. Not included: photos (the small previews stay on this page), location, names, contacts or anything else on your phone.</p>
   </section>
 
-  <footer>Camera Check v2 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
+  <footer>Camera Check v3 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
 </main>
 
 <script>
 "use strict";
-const VERSION = 2;   // (2: snapMs, the scanner's own way of taking a frame, replaces v1's grabMs)
+const VERSION = 3;   // (2: snapMs replaces v1's grabMs; 3: shorter result, close-up with the card filling a box)
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const named = (name, message) => Object.assign(new Error(message), { name });
@@ -191,6 +192,24 @@ function plain(o) {
   if (Array.isArray(o)) return o.map(plain);
   const r = {};
   for (const k in o) { if (DROP.has(k)) continue; const v = o[k]; if (typeof v !== "function") r[k] = plain(v); }
+  return r;
+}
+// The result is kept short (one text message where possible): only what bears on scanning cards
+const KEEP = {
+  back:["focusMode", "focusDistance", "zoom", "torch", "width", "height", "frameRate", "iso", "exposureCompensation", "exposureMode"],
+  front:["focusMode", "focusDistance", "width", "height"],
+  photo:["imageWidth", "imageHeight", "fillLightMode"],
+};
+const LARGEST = ["width", "height", "frameRate", "imageWidth", "imageHeight"];   // sizes: only the largest
+function slim(o, keys) {
+  const r = {};
+  for (const k of keys) {
+    let v = o?.[k];
+    if (v === undefined) continue;
+    if (v && typeof v === "object" && !Array.isArray(v))
+      v = LARGEST.includes(k) ? { max:v.max } : Object.fromEntries(Object.entries(v).filter(([kk]) => kk !== "step"));
+    r[k] = v;
+  }
   return r;
 }
 const rounder = (k, v) => typeof v === "number" && isFinite(v) && !Number.isInteger(v) ? +v.toPrecision(4) : v;
@@ -239,7 +258,8 @@ async function checkDevice() {
       const h = await timeout(n.userAgentData.getHighEntropyValues(["model", "platformVersion", "fullVersionList", "architecture", "bitness", "formFactors"]), 3000, "browser details");
       if (h.model) d.model = h.model;
       d.platform = h.platform; d.platformVersion = h.platformVersion; d.mobile = h.mobile;
-      d.browserVersions = (h.fullVersionList || []).filter(b => !/not.?a.?brand/i.test(b.brand)).map(b => `${b.brand} ${b.version}`);
+      const bv = (h.fullVersionList || []).filter(b => !/not.?a.?brand/i.test(b.brand)).map(b => `${b.brand} ${b.version}`);
+      d.browserVersions = bv.length > 1 ? bv.filter(x => !/^Chromium /.test(x)) : bv;
       if (h.architecture) d.arch = h.architecture + (h.bitness ? "-" + h.bitness : "");
       if (h.formFactors?.length) d.formFactors = h.formFactors;
     } catch (e) {}
@@ -420,11 +440,11 @@ async function probe(d, i, total) {
     s = await openCam({ deviceId:{ exact:d.deviceId }, width:{ ideal:3840 }, height:{ ideal:2160 } });
     info.openMs = Math.round(performance.now() - t0);
     const tr = s.getVideoTracks()[0];
-    info.settings = plain(tr.getSettings());
-    info.capabilities = plain(tr.getCapabilities ? tr.getCapabilities() : {});
-    info.facing = facingOf(info.label, info.capabilities, info.settings);
-    if (typeof ImageCapture === "function") {
-      try { info.photo = plain(await timeout(new ImageCapture(tr).getPhotoCapabilities(), 4000, "photo check")); }
+    const caps = plain(tr.getCapabilities ? tr.getCapabilities() : {});
+    info.facing = facingOf(info.label, caps, plain(tr.getSettings()));
+    info.capabilities = slim(caps, info.facing === "front" ? KEEP.front : KEEP.back);
+    if (typeof ImageCapture === "function" && info.facing !== "front") {
+      try { info.photo = slim(plain(await timeout(new ImageCapture(tr).getPhotoCapabilities(), 4000, "photo check")), KEEP.photo); }
       catch (e) { info.photoError = e.name; }
     }
     const v = $("peek");
@@ -484,7 +504,7 @@ async function runCheck() {
     } catch (e) { R.cameraError = e.name; p.fail(explain(e)); }
   }
   const pd = step("Phone and browser");
-  try { await checkDevice(); await checkFeatures(); pd.done([R.device.model || R.phone, osName(R.device), browserName(R.device)].filter(Boolean).join(" · ")); }
+  try { await checkDevice(); R.device.os = osName(R.device); R.device.browser = browserName(R.device); await checkFeatures(); pd.done([R.device.model || R.phone, osName(R.device), browserName(R.device)].filter(Boolean).join(" · ")); }
   catch (e) { pd.fail(explain(e)); }
   const ps = step("Speed test");
   await sleep(50);
@@ -513,13 +533,22 @@ async function runCheck() {
 }
 
 // ---------- step 2: close-up sharpness per back camera ----------
+// Fair between lenses: the card is held so it fills the same card-shaped box on every camera (closer for a wide lens), as
+// when scanning - each camera is judged on the same card at the same size, not at the same distance (v2 measured the
+// middle half at one distance, which favoured wide lenses: more of the card's edges and text in view)
+const CARD = 63 / 88;   // a trading card's width / height
+function boxOf(vw, vh) {   // the box in video pixels: half the picture's height when upright (where cards sit when scanning)
+  let h = (vh >= vw ? 0.5 : 0.7) * vh, w = h * CARD;
+  if (w > 0.9 * vw) { w = 0.9 * vw; h = w / CARD; }
+  return { x:(vw - w) / 2, y:(vh - h) / 2, w, h };
+}
 const dc = document.createElement("canvas"), dx = dc.getContext("2d", { willReadFrequently:true });
-function detailOf(v) {   // how sharp the middle of the picture is: mean square of the Laplacian over the middle half, at most 640 wide
+function detailOf(v) {   // how sharp the card in the box is: mean square of the Laplacian inside it (8% in from its edges), at 400 x 559
   const vw = v.videoWidth, vh = v.videoHeight;
   if (!vw) return 0;
-  const cw = Math.round(vw / 2), ch = Math.round(vh / 2), W = Math.min(640, cw), H = Math.round(W * ch / cw);
+  const b = boxOf(vw, vh), ix = b.w * 0.08, iy = b.h * 0.08, W = 400, H = Math.round(W / CARD);
   dc.width = W; dc.height = H;
-  dx.drawImage(v, (vw - cw) / 2, (vh - ch) / 2, cw, ch, 0, 0, W, H);
+  dx.drawImage(v, b.x + ix, b.y + iy, b.w - 2 * ix, b.h - 2 * iy, 0, 0, W, H);
   const p = dx.getImageData(0, 0, W, H).data, g = new Float32Array(W * H);
   for (let i = 0, j = 0; i < g.length; i++, j += 4) g[i] = p[j] * 0.299 + p[j + 1] * 0.587 + p[j + 2] * 0.114;
   let s = 0;
@@ -536,7 +565,7 @@ async function closeUp() {
   if (!backs.length) return;
   running = true;
   $("closeBtn").disabled = true; $("run").disabled = true;
-  const out = { asked:"card about 10 cm away", cameras:[] };
+  const out = { method:"card fills a box half the picture high", cameras:[] };
   const viewer = $("viewer"), v = $("view");
   viewer.hidden = false;
   viewer.scrollIntoView({ behavior:"smooth", block:"center" });
@@ -547,13 +576,15 @@ async function closeUp() {
     try {
       s = await openCam({ deviceId:{ exact:c.dev.deviceId }, width:{ ideal:1920 }, height:{ ideal:1080 } });
       await show(v, s);
-      const ar = v.videoWidth / v.videoHeight;
-      viewer.style.aspectRatio = `${v.videoWidth} / ${v.videoHeight}`;
-      viewer.style.width = `min(100%, ${r1(58 * ar)}vh)`;
-      const end = performance.now() + 3000, samples = [];
+      const vw = v.videoWidth, vh = v.videoHeight, b = boxOf(vw, vh);
+      viewer.style.aspectRatio = `${vw} / ${vh}`;
+      viewer.style.width = `min(100%, ${r1(58 * vw / vh)}vh)`;
+      Object.assign($("aim").style, { left:`${100 * b.x / vw}%`, top:`${100 * b.y / vh}%`, width:`${100 * b.w / vw}%`, height:`${100 * b.h / vh}%` });
+      const end = performance.now() + 5000, samples = [];   // 3 s to fill the box, then 2 s measured
       while (performance.now() < end) {
-        $("viewLabel").textContent = `${c.info.label} · ${i + 1} of ${backs.length} · ${Math.ceil((end - performance.now()) / 1000)}`;
-        if (end - performance.now() < 1600) samples.push(detailOf(v));
+        const left = end - performance.now();
+        $("viewLabel").textContent = `${c.info.label} · ${i + 1} of ${backs.length} · ${left > 2000 ? "fill the box with the card" : "hold still"} · ${Math.ceil(left / 1000)}`;
+        if (left < 2000) samples.push(detailOf(v));
         await sleep(150);
       }
       samples.sort((a, b) => a - b);
@@ -583,7 +614,12 @@ async function closeUp() {
 function osName(d) {
   const ua = d.userAgent || "";
   let m;
-  if (/iPhone|iPad|iPod/.test(ua) && (m = ua.match(/OS (\d+)_(\d+)/))) return `${/iPad/.test(ua) ? "iPadOS" : "iOS"} ${m[1]}.${m[2]}`;
+  if (/iPhone|iPad|iPod/.test(ua)) {   // (Safari 26 froze the system version in its user agent - iOS 26 says 18.x - but
+    const os = /iPad/.test(ua) ? "iPadOS" : "iOS";   //  Safari's own version is the system's)
+    if ((m = ua.match(/Version\/(\d+)\.(\d+)/)) && +m[1] >= 26) return `${os} ${m[1]}.${m[2]}`;
+    if ((m = ua.match(/OS (\d+)_(\d+)/))) return `${os} ${m[1]}.${m[2]}${+m[1] === 18 && +m[2] >= 6 ? " or later" : ""}`;
+    return os;
+  }
   if (d.platform === "Android" && d.platformVersion) return "Android " + d.platformVersion.replace(/\.0(\.0)?$/, "");
   if ((m = ua.match(/Android ([\d.]+)/))) return "Android " + m[1];
   if (d.platform) return d.platform + (d.platformVersion ? " " + d.platformVersion.replace(/\.0(\.0)?$/, "") : "");
@@ -638,6 +674,7 @@ function render() {
       + (cams.length > ok.length ? `, ${cams.length - ok.length} wouldn't open` : "") + "."
       + (near ? ` Closest focus on the back: ${cm(near[1])} (${near[0].info.label}).` : "");
   }
+  $("camNote").hidden = !(ok.length && ok.every(c => !c.info.capabilities?.focusMode && !c.info.capabilities?.focusDistance));
   $("cams").innerHTML = cams.map(camCard).join("");
   $("results").hidden = false;
   $("step2").hidden = !backs.length;
@@ -681,7 +718,9 @@ function resultText() {
   if (!R) return "";
   const d = R.device;
   const head = ["Camera Check v" + VERSION, R.phone || d.model, osName(d), browserName(d), d.cores ? d.cores + " cores" : ""].filter(Boolean).join(" · ");
-  return head + "\n" + JSON.stringify(R, rounder);
+  const f = R.features, out = { ...R, features:Object.keys(f).filter(k => f[k] === true) };   // (features: the ones it has)
+  if (f.barcodeFormats) out.barcodeFormats = f.barcodeFormats.length;
+  return head + "\n" + JSON.stringify(out, rounder);
 }
 function refreshOut() {
   const t = resultText();
