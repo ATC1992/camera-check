@@ -167,12 +167,12 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
     <p class="hint">Included: the phone model and system, browser features, speed-test times and each camera's specs. Not included: photos (the small previews stay on this page), location, names, contacts or anything else on your phone.</p>
   </section>
 
-  <footer>Camera Check v1 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
+  <footer>Camera Check v2 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
 </main>
 
 <script>
 "use strict";
-const VERSION = 1;
+const VERSION = 2;   // (2: snapMs, the scanner's own way of taking a frame, replaces v1's grabMs)
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const named = (name, message) => Object.assign(new Error(message), { name });
@@ -394,11 +394,14 @@ function countFps(v, ms) {   // frames the camera actually delivers per second
     setTimeout(() => fin(t0 === null ? 0 : null), ms + 2000);
   });
 }
-function grabMs(v) {   // copy one camera frame into a 1280-wide picture and read its pixels
-  const W = 1280, H = Math.round(W * v.videoHeight / v.videoWidth) || 720;
-  const c = document.createElement("canvas"); c.width = W; c.height = H;
-  const x = c.getContext("2d", { willReadFrequently:true }), t = [];
-  for (let i = 0; i < 4; i++) { const t0 = performance.now(); x.drawImage(v, 0, 0, W, H); x.getImageData(0, 0, W, H); t.push(performance.now() - t0); }
+async function snapMs(v) {   // take one camera frame the way the scanner does (a snapshot, then a 640-long copy read as pixels)
+  const c = document.createElement("canvas"), x = c.getContext("2d", { willReadFrequently:true }), t = [];
+  for (let i = 0; i < 4; i++) {
+    const t0 = performance.now(), bmp = await createImageBitmap(v), k = 640 / Math.max(bmp.width, bmp.height);
+    c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    x.drawImage(bmp, 0, 0, c.width, c.height); x.getImageData(0, 0, c.width, c.height); bmp.close();
+    t.push(performance.now() - t0);
+  }
   const rest = t.slice(1).sort((a, b) => a - b);   // (the first is a warm-up)
   return r1(rest[1]);
 }
@@ -431,7 +434,7 @@ async function probe(d, i, total) {
     info.video = `${v.videoWidth}x${v.videoHeight}`;
     await sleep(300);
     info.fps = await countFps(v, 1000);
-    info.grabMs = grabMs(v);
+    try { info.snapMs = await snapMs(v); } catch (e) {}
     c.thumb = thumb(v);
   } catch (e) {
     info.error = `${e.name}: ${e.message}`;
