@@ -116,9 +116,9 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
 <body>
 <main>
   <header>
-    <p class="eyebrow">Helping build a trading-card scanner</p>
+    <p class="eyebrow">Thanks for helping out</p>
     <h1>Camera Check</h1>
-    <p class="lede">Checks what this phone's cameras and browser can do, so the scanner can work well on as many phones as possible. Nothing leaves your phone on its own: when it's done, you send the result as a small file to whoever shared this page with you.</p>
+    <p class="lede">Checks what this phone's cameras and browser can do. It takes about half a minute. Nothing leaves your phone on its own: when it's done, you send the result as a small file to whoever shared this page with you.</p>
   </header>
 
   <section class="card" id="step1">
@@ -147,7 +147,7 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
 
   <section class="card" id="step2" hidden>
     <h2><span class="num">2</span>Close-up test <span class="tag">optional</span></h2>
-    <p>Have a trading card handy, or anything card-sized with small print? Each back camera gets 5 seconds: move the card until it <strong>fills the dashed box</strong> (closer for wide lenses), keep it flat and still in good light, and the page measures how sharp it looks.</p>
+    <p>Grab a card from your wallet with some small print on it: a gift card, loyalty card or business card is ideal. Each back camera gets 5 seconds: hold the card upright and move it until it <strong>fills the dashed box</strong> from top to bottom (closer for wide lenses), keep it flat and still in good light, and the page measures how sharp it looks. The picture stays on your screen; nothing is saved or sent.</p>
     <div class="viewer" id="viewer" hidden><video id="view" playsinline muted></video><div class="aim" id="aim"></div><div class="vlabel" id="viewLabel"></div></div>
     <button id="closeBtn" type="button">Start close-up test</button>
     <div class="bars" id="closeOut"></div>
@@ -168,12 +168,13 @@ footer { color:var(--muted); font-size:.8rem; text-align:center; padding-top:4px
     <p class="hint">Included: the phone model and system, browser features, speed-test times and each camera's specs. Not included: photos (the small previews stay on this page), location, names, contacts or anything else on your phone.</p>
   </section>
 
-  <footer>Camera Check v4 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
+  <footer>Camera Check v5 · one file with no outside scripts · it sends nothing anywhere, and its security settings block it from contacting any server.</footer>
 </main>
 
 <script>
 "use strict";
-const VERSION = 4;   // (2: snapMs replaces v1's grabMs; 3: shorter result, close-up with the card filling a box; 4: sent as a file)
+const VERSION = 5;   // (2: snapMs replaces v1's grabMs; 3: shorter result, close-up with a card filling a box; 4: sent as a file;
+                     //  5: the close-up box is wallet-card shaped)
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const named = (name, message) => Object.assign(new Error(message), { name });
@@ -194,7 +195,7 @@ function plain(o) {
   for (const k in o) { if (DROP.has(k)) continue; const v = o[k]; if (typeof v !== "function") r[k] = plain(v); }
   return r;
 }
-// The result is kept short (one text message where possible): only what bears on scanning cards
+// The result is kept short: only the useful camera details
 const KEEP = {
   back:["focusMode", "focusDistance", "zoom", "torch", "width", "height", "frameRate", "iso", "exposureCompensation", "exposureMode"],
   front:["focusMode", "focusDistance", "width", "height"],
@@ -336,7 +337,7 @@ function mm(N) {   // a N x N matrix multiply (192: 7 million multiply-adds)
 }
 const WORKER_SRC = mm.toString() + ";onmessage=e=>{const t=performance.now();let s=0;for(let r=0;r<e.data.reps;r++)s+=mm(e.data.n);postMessage({ms:performance.now()-t,s})};";
 
-function pictureMs() {   // shrink a busy full-HD picture to half and read its pixels as grey (what a scanner does per frame)
+function pictureMs() {   // shrink a busy full-HD picture to half and read its pixels as grey
   const src = document.createElement("canvas"); src.width = 1920; src.height = 1080;
   const g = src.getContext("2d");
   for (let i = 0; i < 60; i++) {
@@ -344,7 +345,7 @@ function pictureMs() {   // shrink a busy full-HD picture to half and read its p
     g.fillRect(i * 97 % 1800, i * 53 % 1000, 120 + i % 7 * 20, 80 + i % 5 * 20);
   }
   g.fillStyle = "#000"; g.font = "48px sans-serif";
-  for (let y = 60; y < 1080; y += 70) g.fillText("Card scanner test 0123456789", 40, y);
+  for (let y = 60; y < 1080; y += 70) g.fillText("Camera check test 0123456789", 40, y);
   const dst = document.createElement("canvas"); dst.width = 960; dst.height = 540;
   const x = dst.getContext("2d", { willReadFrequently:true });
   let best = Infinity, s = 0;
@@ -414,7 +415,7 @@ function countFps(v, ms) {   // frames the camera actually delivers per second
     setTimeout(() => fin(t0 === null ? 0 : null), ms + 2000);
   });
 }
-async function snapMs(v) {   // take one camera frame the way the scanner does (a snapshot, then a 640-long copy read as pixels)
+async function snapMs(v) {   // take one camera frame as a live camera page would (a snapshot, then a 640-long copy read as pixels)
   const c = document.createElement("canvas"), x = c.getContext("2d", { willReadFrequently:true }), t = [];
   for (let i = 0; i < 4; i++) {
     const t0 = performance.now(), bmp = await createImageBitmap(v), k = 640 / Math.max(bmp.width, bmp.height);
@@ -533,17 +534,17 @@ async function runCheck() {
 }
 
 // ---------- step 2: close-up sharpness per back camera ----------
-// Fair between lenses: the card is held so it fills the same card-shaped box on every camera (closer for a wide lens), as
-// when scanning - each camera is judged on the same card at the same size, not at the same distance (v2 measured the
-// middle half at one distance, which favoured wide lenses: more of the card's edges and text in view)
-const CARD = 63 / 88;   // a trading card's width / height
-function boxOf(vw, vh) {   // the box in video pixels: half the picture's height when upright (where cards sit when scanning)
+// Fair between lenses: the card is held so it fills the same card-shaped box on every camera (closer for a wide lens) -
+// each camera is judged on the same card at the same size, not at the same distance (v2 measured the middle half at one
+// distance, which favoured wide lenses: more of the card's edges and text in view)
+const CARD = 54 / 85.6;   // a wallet card held upright (bank, gift, loyalty cards: 54 x 85.6 mm), width / height
+function boxOf(vw, vh) {   // the box in video pixels: half the picture's height when upright
   let h = (vh >= vw ? 0.5 : 0.7) * vh, w = h * CARD;
   if (w > 0.9 * vw) { w = 0.9 * vw; h = w / CARD; }
   return { x:(vw - w) / 2, y:(vh - h) / 2, w, h };
 }
 const dc = document.createElement("canvas"), dx = dc.getContext("2d", { willReadFrequently:true });
-function detailOf(v) {   // how sharp the card in the box is: mean square of the Laplacian inside it (8% in from its edges), at 400 x 559
+function detailOf(v) {   // how sharp the card in the box is: mean square of the Laplacian inside it (8% in from its edges), at 400 x 634
   const vw = v.videoWidth, vh = v.videoHeight;
   if (!vw) return 0;
   const b = boxOf(vw, vh), ix = b.w * 0.08, iy = b.h * 0.08, W = 400, H = Math.round(W / CARD);
@@ -565,7 +566,7 @@ async function closeUp() {
   if (!backs.length) return;
   running = true;
   $("closeBtn").disabled = true; $("run").disabled = true;
-  const out = { method:"card fills a box half the picture high", cameras:[] };
+  const out = { method:"wallet card fills a box half the picture high", cameras:[] };
   const viewer = $("viewer"), v = $("view");
   viewer.hidden = false;
   viewer.scrollIntoView({ behavior:"smooth", block:"center" });
@@ -732,8 +733,8 @@ function refreshOut() {
 $("run").addEventListener("click", runCheck);
 $("closeBtn").addEventListener("click", closeUp);
 $("model").addEventListener("input", () => { if (R) { R.phone = $("model").value.trim(); render(); } });
-// The result goes as a small text file (owner 10-14: results come back through Discord, where a message stops at 2,000
-// characters without Nitro - an attachment has no such limit): the share sheet where it takes files, else a download
+// The result goes as a small text file (chat apps cut long messages - Discord stops at 2,000 characters - an attachment
+// has no such limit): the share sheet where it takes files, else a download
 function resultFile() {
   const who = (R.phone || R.device.model || R.device.os || "phone").replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "phone";
   const when = R.when.slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
